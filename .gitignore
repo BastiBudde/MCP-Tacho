@@ -1,1 +1,7 @@
 Debug
+.launches/
+.settings/
+/.DS_Store
+/.ccsproject
+/.cproject
+/.project
