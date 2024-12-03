@@ -8,6 +8,11 @@
 #ifndef BITS_H_
 #define BITS_H_
 
+#define SET(REG, BITS)   (REG |=  (BITS))
+#define CLEAR(REG, BITS)   (REG &= ~(BITS))
+#define TOGGLE(REG, BITS)   (REG ^=  (BITS))
+
+
 
 #define BIT0  (0x01 << 0)
 #define BIT1  (0x01 << 1)
