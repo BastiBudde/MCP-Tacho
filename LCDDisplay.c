@@ -153,12 +153,30 @@ void draw_line_bresenham(int x0, int y0, int x1, int y1, uint32_t color) {
     }
 }
 
-void draw_rectangle(int x0, int y0, int x1, int y1, uint32_t color) {
+void draw_rectangle(int x0, int y0, int x1, int y1, int border_width, uint32_t color) {
     // Zeichne die vier Linien des Rechtecks mit Bresenham
-    draw_line_bresenham(x0, y0, x1, y0, color); // obere Linie
-    draw_line_bresenham(x1, y0, x1, y1, color); // rechte Linie
-    draw_line_bresenham(x1, y1, x0, y1, color); // untere Linie
-    draw_line_bresenham(x0, y1, x0, y0, color); // linke Linie
+    int i;
+
+    for(i=0; i<border_width; i++){
+        draw_line_bresenham(x0+i, y0+i, x1-i, y0+i, color); // obere Linie
+        draw_line_bresenham(x1-i, y0+i, x1-i, y1-i, color); // rechte Linie
+        draw_line_bresenham(x1-i, y1-i, x0+i, y1-i, color); // untere Linie
+        draw_line_bresenham(x0+i, y1-i, x0+i, y0+i, color); // linke Linie
+    }
+}
+
+void draw_filled_rectangle(int x0, int y0, int x1, int y1, colors color){
+    window_set(x0, y0, x1, y1);
+
+    int npixel = (x1 - x0) * (y1 - y0);
+    int n;
+    write_command(0x2C);
+    for (n = 0; n < npixel; n++) {
+        write_data((color >> 16) & 0xff); // Rotanteil
+        write_data((color >> 8) & 0xff);  // Gr�nanteil
+        write_data(color & 0xff);         // Blauanteil
+    }
+
 }
 
 
@@ -166,7 +184,7 @@ void setPixel(int x, int y, uint32_t color) {
     window_set(x, y, x, y);  // Pixelposition setzen
     write_command(0x2C);    // Schreibe Pixel-Befehl
     write_data((color >> 16) & 0xff); // Rotanteil
-    write_data((color >> 8) & 0xff);  // Gr�nanteil
+    write_data((color >> 8) & 0xff);  // Grünanteil
     write_data(color & 0xff);         // Blauanteil
 }
 
@@ -252,7 +270,7 @@ void drawV(int startpoint_x, int startpoint_y, int height){
     draw_line_bresenham(startpoint_x, startpoint_y, (startpoint_x+(height/2)), (startpoint_y-height),  LILA);
 }
 
-void drawSymbol(int x, int y, const char symbol[212], uint32_t col) {
+void drawSymbol(int x, int y, const char symbol[212], uint32_t col, uint32_t bgcol) {
     int i, j;
     uint32_t row = 0;
     for (i = 0; i < 53; i++) { //geht die Zeilen durch
@@ -261,7 +279,7 @@ void drawSymbol(int x, int y, const char symbol[212], uint32_t col) {
           if ((row >> (32 - j)) & 1) { //shiftet die Zeile i um
               setPixel(x + (32-j), y + i, col);
           }else{
-              setPixel(x + (32-j), y + i, BLACK);
+              setPixel(x + (32-j), y + i, bgcol);
           }
       }
     }
@@ -269,10 +287,10 @@ void drawSymbol(int x, int y, const char symbol[212], uint32_t col) {
     return;
 }
 
-void drawString(int x, int y, char* str, const char font[][212], uint32_t col) {
+void drawString(int x, int y, char* str, const char font[][212], uint32_t col, uint32_t bgcol) {
     uint16_t xx = x;
     while (*str) {
-        drawSymbol(xx, y, font[(unsigned char)*str], col);
+        drawSymbol(xx, y, font[(unsigned char)*str], col, bgcol);
         xx += FONT_SPACING;
         str++;
     }
@@ -280,30 +298,30 @@ void drawString(int x, int y, char* str, const char font[][212], uint32_t col) {
     return;
 }
 
-void drawInteger(int x, int y, const char font[][212], uint16_t number, uint32_t col) {
+void drawInteger(int x, int y, const char font[][212], uint16_t number, uint32_t col, uint32_t bgcol) {
 
     short hunderter = number/100;
     short zehner = (number-100*hunderter)/10;
     short einer = number - 100*hunderter - 10*zehner;
 
     if(hunderter == 0){
-        drawSymbol(x, y, font[' '], col);
+        drawSymbol(x, y, font[' '], col, bgcol);
     }else{
-        drawSymbol(x, y, font[hunderter + '0'], col);
+        drawSymbol(x, y, font[hunderter + '0'], col, bgcol);
     }
 
     if(hunderter == 0 && zehner == 0){
-        drawSymbol(x+FONT_SPACING, y, font[' '], col);
+        drawSymbol(x+FONT_SPACING, y, font[' '], col, bgcol);
     }else{
-        drawSymbol(x+FONT_SPACING, y, font[zehner + '0'], col);
+        drawSymbol(x+FONT_SPACING, y, font[zehner + '0'], col, bgcol);
     }
 
-    drawSymbol(x+2*FONT_SPACING, y, font[einer + '0'], col);
+    drawSymbol(x+2*FONT_SPACING, y, font[einer + '0'], col, bgcol);
 
     return;
 }
 
-void drawKM(int x, int y, const char font[][212], uint32_t dailyCM, uint32_t col) {
+void drawKM(int x, int y, const char font[][212], uint32_t dailyCM, uint32_t col, uint32_t bgcol) {
 
     uint32_t num = dailyCM / 1000;
 
@@ -315,21 +333,21 @@ void drawKM(int x, int y, const char font[][212], uint32_t dailyCM, uint32_t col
 
 
     if(hunderter == 0){
-        drawSymbol(x, y, font[' '], col);
+        drawSymbol(x, y, font[' '], col, bgcol);
     }else{
-        drawSymbol(x, y, font[hunderter + '0'], col);
+        drawSymbol(x, y, font[hunderter + '0'], col, bgcol);
     }
 
     if(hunderter == 0 && zehner == 0){
-        drawSymbol(x+FONT_SPACING, y, font[' '], col);
+        drawSymbol(x+FONT_SPACING, y, font[' '], col, bgcol);
     }else{
-        drawSymbol(x+FONT_SPACING, y, font[zehner + '0'], col);
+        drawSymbol(x+FONT_SPACING, y, font[zehner + '0'], col, bgcol);
     }
 
-    drawSymbol(x+2*FONT_SPACING, y, font[einer + '0'], col);
-    drawSymbol(x+3*FONT_SPACING, y, font[','], col);
-    drawSymbol(x+4*FONT_SPACING, y, font[zehntel + '0'], col);
-    drawSymbol(x+5*FONT_SPACING, y, font[hunderstel + '0'], col);
+    drawSymbol(x+2*FONT_SPACING, y, font[einer + '0'], col, bgcol);
+    drawSymbol(x+3*FONT_SPACING, y, font[','], col, bgcol);
+    drawSymbol(x+4*FONT_SPACING, y, font[zehntel + '0'], col, bgcol);
+    drawSymbol(x+5*FONT_SPACING, y, font[hunderstel + '0'], col, bgcol);
 
     return;
 }

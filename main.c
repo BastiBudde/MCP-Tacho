@@ -51,6 +51,34 @@
 #define DIR_YPOS 200
 #define DIR_FONT_COLOR(dir) ((dir)==FORWARD ? GREEN : RED)
 
+// BUTTONS
+#define BUTTON_COLOR GREY
+#define BUTTON_BORDER_COLOR WHITE
+
+#define BUTTON_WIDTH (DISPLAY_X_MAX/3)
+
+#define BUTTON_PADDING 10
+#define BUTTON_HEIGTH (FONT_SIZE_Y + 2*BUTTON_PADDING)
+
+#define DPXL2TPXL()
+
+#define X0_BUTTON_BL 0
+#define Y0_BUTTON_BL (DISPLAY_Y_MAX - BUTTON_HEIGTH)
+#define X1_BUTTON_BL (X0_BUTTON_BL + BUTTON_WIDTH)
+#define Y1_BUTTON_BL DISPLAY_Y_MAX
+
+#define X0_BUTTON_BC (X1_BUTTON_BL + 1)
+#define Y0_BUTTON_BC Y0_BUTTON_BL
+#define X1_BUTTON_BC (X0_BUTTON_BC + BUTTON_WIDTH)
+#define Y1_BUTTON_BC Y1_BUTTON_BL
+
+#define X0_BUTTON_BR (X1_BUTTON_BC + 1)
+#define Y0_BUTTON_BR Y0_BUTTON_BL
+#define X1_BUTTON_BR (X0_BUTTON_BR + BUTTON_WIDTH)
+#define Y1_BUTTON_BR Y1_BUTTON_BL
+
+
+
 
 
 enum Direction {
@@ -67,6 +95,11 @@ volatile float    g_fSpeedKMH   = 0.0f;     // Speed calculated from edge count
 volatile float    g_fRevsPerSec = 0.0f;     // RPS calculated from edge count
 uint16_t          g_ui16NeedelTipX = 0;     // Last x position of needle tip
 uint16_t          g_ui16NeedelTipY = 0;     // Last y position of needle tip
+// Global Variable
+uint8_t button_changed;
+uint8_t color_changed;
+uint16_t xpos;
+uint16_t ypos;
 
 // fun
 uint8_t colidx = 1;
@@ -129,26 +162,61 @@ void timer0AISR(void){
     rasterHalfCircle(CX, CY, (50), false, ORANGE);
 
 
-    // Winkel in Bogenmaß
+    // Winkel in Bogenmaï¿½
     float theta = PI - ((g_fSpeedKMH / 400.0f) * PI);
 
     // Koordinaten berechnen
     g_ui16NeedelTipX = (int)(CX + RAD * cos(theta));
-    g_ui16NeedelTipY = (int)(CY - RAD * sin(theta)); // Minus für "Pixelkoordinaten"
+    g_ui16NeedelTipY = (int)(CY - RAD * sin(theta)); // Minus fï¿½r "Pixelkoordinaten"
 
     draw_line_bresenham(CX, CY, g_ui16NeedelTipX, g_ui16NeedelTipY, ROT);
 
-    drawInteger(VEL_XPOS, VEL_YPOS, font, (uint16_t)g_fSpeedKMH, VEL_FONT_COLOR);
-    drawKM(KM_XPOS, KM_YPOS, font, g_ui32DailyCM, KM_FONT_COLOR);
-    drawSymbol(DIR_XPOS, DIR_YPOS, font[direction], DIR_FONT_COLOR(direction));
+    drawInteger(VEL_XPOS, VEL_YPOS, font, (uint16_t)g_fSpeedKMH, VEL_FONT_COLOR, BLACK);
+    drawKM(KM_XPOS, KM_YPOS, font, g_ui32DailyCM, KM_FONT_COLOR, BLACK);
+    drawSymbol(DIR_XPOS, DIR_YPOS, font[direction], DIR_FONT_COLOR(direction), BLACK);
 
     // fun
     colidx = (colidx+1) % 10;
-    drawString(0, 0, "69", font, colorarray[colidx]);
-    drawString(MAX_X-3*FONT_SPACING, 0, "420", font, colorarray[colidx]);
+    drawString(0, 0, "69", font, colorarray[colidx], BLACK);
+    drawString(DISPLAY_X_MAX-3*FONT_SPACING, 0, "420", font, colorarray[colidx], BLACK);
 
 
     TimerEnable(TIMER0_BASE, TIMER_A);  // for debug
+}
+
+
+void sysTickISR(){
+    IntDisable(INT_GPIOP0); // Disable interrupts for timing critical section
+    IntDisable(INT_GPIOP1);
+
+    int x;
+    touch_write(0xD0);                  //Touch Command XPos read
+    for (x = 0; x < 10; x++);           //Busy wait
+    xpos = touch_read();                //xpos value read ( 0......4095 )
+    touch_write(0x90);                  //Touch Command YPos read
+    for (x = 0; x < 10; x++);           //Busy wait
+    ypos = touch_read();                //ypos value read ( 0.....4095 )
+
+    IntEnable(INT_GPIOP0); // Re-enable interrupts after timing critical section
+    IntEnable(INT_GPIOP1);
+
+    //Site 1
+    //Reset, Light/Dark-Mode,Next Site
+
+    //Site 2
+    //Back Site, Carosserie Farbe, Reifen Farbe
+    //Karosserie*
+    if((ypos >= 3000) && (ypos<= 4095)){
+        if ((xpos >= 3000) && (xpos<= 4095)){
+                button_changed = 0x00;
+        }else if((xpos >= 200) && (xpos<= 300)){
+            if (button_changed){
+                color_changed = !color_changed;
+            }else{
+                button_changed = 0x01;
+            }
+        }
+    }
 }
 
 
@@ -237,6 +305,7 @@ void init(void){
         IntEnable(INT_GPIOP1);
         IntEnable(INT_GPIOP0);
 
+
     //////////////////////
     // Configure Port D //
     //////////////////////
@@ -244,21 +313,11 @@ void init(void){
         // Port D Pin 4 gives the interrupt signal
         SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD); //Enable clock Port D
         while ((SYSCTL_PRGPIO_R & 0x08) == 0);  //GPIO Clock ready?
-        GPIO_PORTD_AHB_DEN_R = 0x1F;            //PortD digital enable
-        GPIO_PORTD_AHB_DIR_R = 0x0D;            //PortD Input/Output
-        GPIO_PORTD_AHB_DATA_R &= 0xF7;          //Clk=0
 
-        // touch interrupt init
-        GPIO_PORTD_AHB_IS_R &= ~0x10;   // Edge-sensitive
-        GPIO_PORTD_AHB_IBE_R &= ~0x10;   // Single edge trigger
-        GPIO_PORTD_AHB_IEV_R |= 0x10;   // Rising edge trigger
-        GPIO_PORTD_AHB_ICR_R |= 0x10;   // Clear any initial pending interrupt
+        GPIOPinTypeGPIOInput(GPIO_PORTD_BASE, GPIO_PIN_4 | GPIO_PIN_1);
+        GPIOPinTypeGPIOOutput(GPIO_PORTD_BASE, GPIO_PIN_0 | GPIO_PIN_2 | GPIO_PIN_3);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_3, 0); //Clk=0
 
-        // Register and enable the interrupt:
-        IntRegister(INT_GPIOD, GPIOPortDIntHandler);
-        IntPrioritySet(INT_GPIOD, 0x30); // Set priority
-        GPIO_PORTD_AHB_IM_R |= 0x10;   // Enable interrupt for PD4
-        IntEnable(INT_GPIOD);          // Enable interrupts globally for GPIO Port D
 
     ///////////////////////
     // Configure Timer0A //
@@ -282,15 +341,38 @@ void init(void){
         // Switch interrupt source on
         TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
 
+
+    /////////////////////////////
+    // Configure SysTick Timer //
+    /////////////////////////////
+
+        // SysTick deaktivieren
+        SysTickDisable();
+
+        // SysTick Interrupt aktivieren
+        SysTickIntEnable();
+
+        // Lade die berechnete Zeit
+        SysTickPeriodSet( (g_ui32SysClock/10) - 1);
+
+        // SysTick-Handler registrieren
+        SysTickIntRegister(sysTickISR);
+
+        // set second highest prio
+        IntPrioritySet(FAULT_SYSTICK, 0x30);
+
+        // SysTick starten
+        SysTickEnable();
+
     //////////////////////////////
     // Configure & init Display //
     //////////////////////////////
         configure_display_controller_large();
-        window_set(0, 0, MAX_X - 1, MAX_Y - 1);
+        window_set(0, 0, DISPLAY_X_MAX - 1, DISPLAY_Y_MAX - 1);
         write_command(0x2C);
         int x = 0; int y = 0;
-        for (x = 0; x < MAX_X; x++) {
-            for (y = 0; y < MAX_Y; y++) {
+        for (x = 0; x < DISPLAY_X_MAX; x++) {
+            for (y = 0; y < DISPLAY_Y_MAX; y++) {
                write_data(0x00); // Schwarz
                write_data(0x00);
                write_data(0x00);
@@ -304,22 +386,29 @@ void init(void){
 
 
         // draw units for speed and daily km counter
-        drawString(VEL_XPOS+3*FONT_SPACING, VEL_YPOS, "km/h", font, VEL_FONT_COLOR);
-//        drawSymbol(VEL_XPOS+3*FONT_SPACING, VEL_YPOS, font['k'], VEL_FONT_COLOR);
-//        drawSymbol(VEL_XPOS+4*FONT_SPACING, VEL_YPOS, font['m'], VEL_FONT_COLOR);
-//        drawSymbol(VEL_XPOS+5*FONT_SPACING, VEL_YPOS, font['/'], VEL_FONT_COLOR);
-//        drawSymbol(VEL_XPOS+6*FONT_SPACING, VEL_YPOS, font['h'], VEL_FONT_COLOR);
+        drawString(VEL_XPOS+3*FONT_SPACING, VEL_YPOS, "km/h", font, VEL_FONT_COLOR, BLACK);
 
-        drawString(KM_XPOS+6*FONT_SPACING, KM_YPOS, "km", font, KM_FONT_COLOR);
-//        drawSymbol(KM_XPOS+6*FONT_SPACING, KM_YPOS, font['k'], KM_FONT_COLOR);
-//        drawSymbol(KM_XPOS+7*FONT_SPACING, KM_YPOS, font['m'], KM_FONT_COLOR);
+        drawString(KM_XPOS+6*FONT_SPACING, KM_YPOS, "km", font, KM_FONT_COLOR, BLACK);
 
         // draw first direction letter
-        drawSymbol(DIR_XPOS, DIR_YPOS, font[FORWARD-'!'], DIR_FONT_COLOR(FORWARD));
+        drawSymbol(DIR_XPOS, DIR_YPOS, font[FORWARD-'!'], DIR_FONT_COLOR(FORWARD), BLACK);
+
+        // draw buttons
+        draw_filled_rectangle(X0_BUTTON_BL, Y0_BUTTON_BL, X1_BUTTON_BL, Y1_BUTTON_BL, BUTTON_COLOR);
+        draw_rectangle(X0_BUTTON_BL, Y0_BUTTON_BL, X1_BUTTON_BL, Y1_BUTTON_BL, 2, BUTTON_BORDER_COLOR);
+        drawString(X0_BUTTON_BL+10, Y0_BUTTON_BL+BUTTON_PADDING, "Theme", font, WHITE, BUTTON_COLOR);
+
+        draw_filled_rectangle(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, BUTTON_COLOR);
+        draw_rectangle(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, 2, BUTTON_BORDER_COLOR);
+        drawString(X0_BUTTON_BC+10, Y0_BUTTON_BC+BUTTON_PADDING, "Reset", font, WHITE, BUTTON_COLOR);
+
+        draw_filled_rectangle(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, BUTTON_COLOR);
+        draw_rectangle(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, 2, BUTTON_BORDER_COLOR);
+        drawString(X0_BUTTON_BR+10, Y0_BUTTON_BR+BUTTON_PADDING, "Page", font, WHITE, BUTTON_COLOR);
 
         // fun
-        drawString(0, 0, "69", font, colorarray[colidx]);
-        drawString(MAX_X-3*FONT_SPACING, 0, "420", font, colorarray[colidx]);
+        drawString(0, 0, "69", font, colorarray[colidx], BLACK);
+        drawString(DISPLAY_X_MAX-3*FONT_SPACING, 0, "420", font, colorarray[colidx], BLACK);
 
 
     IntMasterEnable(); // Re-enable interrupts
