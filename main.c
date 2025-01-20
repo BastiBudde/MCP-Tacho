@@ -4,9 +4,9 @@
  * Version: 1.0
  *
  * */
-#include "bits.h"
 #include "font.h"
 #include "LCDDisplay.h"
+#include "Touch.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,10 +72,6 @@ uint16_t          g_ui16NeedelTipY = 0;     // Last y position of needle tip
 uint8_t colidx = 1;
 
 
-
-
-
-
 /********************************************************************************
      ISRs
 *********************************************************************************/
@@ -133,12 +129,12 @@ void timer0AISR(void){
     rasterHalfCircle(CX, CY, (50), false, ORANGE);
 
 
-    // Winkel in Bogenma√ü
+    // Winkel in Bogenmaﬂ
     float theta = PI - ((g_fSpeedKMH / 400.0f) * PI);
 
     // Koordinaten berechnen
     g_ui16NeedelTipX = (int)(CX + RAD * cos(theta));
-    g_ui16NeedelTipY = (int)(CY - RAD * sin(theta)); // Minus f√ºr "Pixelkoordinaten"
+    g_ui16NeedelTipY = (int)(CY - RAD * sin(theta)); // Minus f¸r "Pixelkoordinaten"
 
     draw_line_bresenham(CX, CY, g_ui16NeedelTipX, g_ui16NeedelTipY, ROT);
 
@@ -154,9 +150,6 @@ void timer0AISR(void){
 
     TimerEnable(TIMER0_BASE, TIMER_A);  // for debug
 }
-
-
-
 
 
 
@@ -244,6 +237,28 @@ void init(void){
         IntEnable(INT_GPIOP1);
         IntEnable(INT_GPIOP0);
 
+    //////////////////////
+    // Configure Port D //
+    //////////////////////
+        // Port D will be used for the touch-function of the display
+        // Port D Pin 4 gives the interrupt signal
+        SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD); //Enable clock Port D
+        while ((SYSCTL_PRGPIO_R & 0x08) == 0);  //GPIO Clock ready?
+        GPIO_PORTD_AHB_DEN_R = 0x1F;            //PortD digital enable
+        GPIO_PORTD_AHB_DIR_R = 0x0D;            //PortD Input/Output
+        GPIO_PORTD_AHB_DATA_R &= 0xF7;          //Clk=0
+
+        // touch interrupt init
+        GPIO_PORTD_AHB_IS_R &= ~0x10;   // Edge-sensitive
+        GPIO_PORTD_AHB_IBE_R &= ~0x10;   // Single edge trigger
+        GPIO_PORTD_AHB_IEV_R |= 0x10;   // Rising edge trigger
+        GPIO_PORTD_AHB_ICR_R |= 0x10;   // Clear any initial pending interrupt
+
+        // Register and enable the interrupt:
+        IntRegister(INT_GPIOD, GPIOPortDIntHandler);
+        IntPrioritySet(INT_GPIOD, 0x30); // Set priority
+        GPIO_PORTD_AHB_IM_R |= 0x10;   // Enable interrupt for PD4
+        IntEnable(INT_GPIOD);          // Enable interrupts globally for GPIO Port D
 
     ///////////////////////
     // Configure Timer0A //
@@ -262,7 +277,7 @@ void init(void){
         TimerIntRegister(TIMER0_BASE, TIMER_A, timer0AISR);
 
         // lower interrupt prio than P1
-        IntPrioritySet(INT_TIMER0A,0x30);
+        IntPrioritySet(INT_TIMER0A,0x40);
 
         // Switch interrupt source on
         TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
