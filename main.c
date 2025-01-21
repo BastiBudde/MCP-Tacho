@@ -61,11 +61,11 @@
 #define BUTTON_BORDER_WIDTH 2
 
 #define BUTTON_PADDING 10
-#define BUTTON_HEIGTH (FONT_SIZE_Y + 2*BUTTON_PADDING)
+#define BUTTON_HEIGHT (FONT_SIZE_Y + 2*BUTTON_PADDING)
 
 
 #define X0_BUTTON_BL 0
-#define Y0_BUTTON_BL (Y1_BUTTON_BL - BUTTON_HEIGTH)
+#define Y0_BUTTON_BL (Y1_BUTTON_BL - BUTTON_HEIGHT)
 #define X1_BUTTON_BL (X0_BUTTON_BL + BUTTON_WIDTH)
 #define Y1_BUTTON_BL (DISPLAY_Y_MAX-1)
 
@@ -110,6 +110,9 @@ uint16_t          g_ui16NeedelTipX = 0;     // Last x position of needle tip
 uint16_t          g_ui16NeedelTipY = 0;     // Last y position of needle tip
 
 // Global Variable
+colors backroundColor = BLACK;
+colors fontColor= WHITE;
+colors carColor= RED;
 uint32_t xpos;
 uint32_t ypos;
 
@@ -117,7 +120,41 @@ uint32_t ypos;
 // fun
 uint8_t colidx = 1;
 #endif
+/********************************************************************************
+     Page Functions
+*********************************************************************************/
 
+void drawFirstPage(){
+    // delete old needle
+    draw_line_bresenham(CX, CY, g_ui16NeedelTipX, g_ui16NeedelTipY, backroundColor);
+    rasterHalfCircle(CX, CY, RAD, false, fontColor); // Oberer Halbkreis
+    rasterHalfCircle(CX, CY, (RAD-30), false, GREY);
+    rasterHalfCircle(CX, CY, (50), false, ORANGE);
+
+
+    // Winkel in Bogenma�
+    float theta = PI - ((g_fSpeedKMH / 400.0f) * PI);
+    if (theta > PI){
+        theta = PI;
+    }else if (theta < 0){
+        theta = 0.0f;
+    }
+
+    // Koordinaten berechnen
+    g_ui16NeedelTipX = (int)(CX + RAD * cos(theta));
+    g_ui16NeedelTipY = (int)(CY - RAD * sin(theta)); // Minus f�r "Pixelkoordinaten"
+
+    draw_line_bresenham(CX, CY, g_ui16NeedelTipX, g_ui16NeedelTipY, ROT);
+
+    drawInteger(VEL_XPOS, VEL_YPOS, font, (uint16_t)g_fSpeedKMH, fontColor, backroundColor);
+    drawKM(KM_XPOS, KM_YPOS, font, g_ui32DailyCM, fontColor, backroundColor);
+    drawSymbol(DIR_XPOS, DIR_YPOS, font[direction], DIR_FONT_COLOR(direction), backroundColor);
+    return;
+}
+
+void drawSecondPage(){
+
+}
 
 /********************************************************************************
      ISRs
@@ -168,37 +205,24 @@ void timer0AISR(void){
     g_fSpeedKMH    = ( g_fRevsPerSec * TIRE_CIRCUM_CM * 36.0f )/1000.0f;
     g_ui32EdgeCntS1S2 = 0;
 
+    switch(page){ // Check which page is displayed (buttons have different functionality on each page)
+            case PAGE1: // Tacho
+                drawFirstPage();
+                break;
 
-    // delete old needle
-    draw_line_bresenham(CX, CY, g_ui16NeedelTipX, g_ui16NeedelTipY, BLACK);
-    rasterHalfCircle(CX, CY, RAD, false, WHITE); // Oberer Halbkreis
-    rasterHalfCircle(CX, CY, (RAD-30), false, GREY);
-    rasterHalfCircle(CX, CY, (50), false, ORANGE);
+            case PAGE2: //Renstrecke
+                drawSecondPage();
+                break;
 
+            default: break;
+        }
 
-    // Winkel in Bogenma�
-    float theta = PI - ((g_fSpeedKMH / 400.0f) * PI);
-    if (theta > PI){
-        theta = PI;
-    }else if (theta < 0){
-        theta = 0.0f;
-    }
-
-    // Koordinaten berechnen
-    g_ui16NeedelTipX = (int)(CX + RAD * cos(theta));
-    g_ui16NeedelTipY = (int)(CY - RAD * sin(theta)); // Minus f�r "Pixelkoordinaten"
-
-    draw_line_bresenham(CX, CY, g_ui16NeedelTipX, g_ui16NeedelTipY, ROT);
-
-    drawInteger(VEL_XPOS, VEL_YPOS, font, (uint16_t)g_fSpeedKMH, VEL_FONT_COLOR, BLACK);
-    drawKM(KM_XPOS, KM_YPOS, font, g_ui32DailyCM, KM_FONT_COLOR, BLACK);
-    drawSymbol(DIR_XPOS, DIR_YPOS, font[direction], DIR_FONT_COLOR(direction), BLACK);
 
     // fun
 #ifdef FUN
     colidx = (colidx+1) % 10;
-    drawString(0, 0, "69", font, colorarray[colidx], BLACK);
-    drawString(DISPLAY_X_MAX-3*FONT_SPACING, 0, "420", font, colorarray[colidx], BLACK);
+    drawString(0, 0, "69", font, colorarray[colidx], backroundColor);
+    drawString(DISPLAY_X_MAX-3*FONT_SPACING, 0, "420", font, colorarray[colidx], backroundColor);
 #endif
 
     TimerEnable(TIMER0_BASE, TIMER_A);  // for debug
@@ -226,12 +250,49 @@ void sysTickISR(){
     switch(page){ // Check which page is displayed (buttons have different functionality on each page)
         case PAGE1: // Tacho
             if( CHECK_BUTTON_BL(xpos, ypos) ){
-
+               if (backroundColor == BLACK){
+                   backroundColor = WHITE;
+                   fontColor = BLACK;
+               }else{
+                   backroundColor = BLACK;
+                   fontColor = WHITE;
+               }
+               window_set(0, 0, DISPLAY_X_MAX - 1, DISPLAY_Y_MAX - BUTTON_HEIGHT - 1);
+               write_command(0x2C);
+               int x = 0; int y = 0;
+               for (x = 0; x < DISPLAY_X_MAX; x++) {
+                   for (y = 0; y < DISPLAY_Y_MAX - BUTTON_HEIGHT; y++) {
+                      write_data((backroundColor>>16)&0xff); // Schwarz
+                      write_data((backroundColor>>8)&0xff);
+                      write_data((backroundColor)&0xff);
+                   }
+               }
+               // draw units for speed and daily km counter
+               drawString(VEL_XPOS+3*FONT_SPACING, VEL_YPOS, "km/h", font, fontColor, backroundColor);
+               drawString(KM_XPOS+6*FONT_SPACING, KM_YPOS, "km", font, fontColor, backroundColor);
+               drawFirstPage();
             }
             else if( CHECK_BUTTON_BC(xpos, ypos) ){
-
+                g_ui32DailyCM = 0.0f;
+                drawFirstPage();
             }
             else if( CHECK_BUTTON_BR(xpos, ypos) ){
+                window_set(0, 0, DISPLAY_X_MAX - 1, DISPLAY_Y_MAX - BUTTON_HEIGHT- 1);
+                write_command(0x2C);
+                int x = 0; int y = 0;
+                for (x = 0; x < DISPLAY_X_MAX; x++) {
+                   for (y = 0; y < DISPLAY_Y_MAX - BUTTON_HEIGHT; y++) {
+                      write_data((backroundColor>>16)&0xff);
+                      write_data((backroundColor>>8)&0xff);
+                      write_data((backroundColor)&0xff);
+                   }
+                }
+                draw_Button(X0_BUTTON_BL, Y0_BUTTON_BL, X1_BUTTON_BL, Y1_BUTTON_BL, "Back", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+                draw_Button(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, "Color", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+                draw_Button(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, "IDK", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+//                drawSecondPage();
+                drawSecondPage();
+                page = PAGE2;
 
             }
             else{
@@ -242,6 +303,25 @@ void sysTickISR(){
 
         case PAGE2: //Renstrecke
             if( CHECK_BUTTON_BL(xpos, ypos) ){
+                window_set(0, 0, DISPLAY_X_MAX - 1, DISPLAY_Y_MAX - 1);
+                write_command(0x2C);
+                int x = 0; int y = 0;
+                for (x = 0; x < DISPLAY_X_MAX; x++) {
+                   for (y = 0; y < DISPLAY_Y_MAX - BUTTON_HEIGHT; y++) {
+                      write_data((backroundColor>>16)&0xff);
+                      write_data((backroundColor>>8)&0xff);
+                      write_data((backroundColor)&0xff);
+                   }
+                }
+                drawString(VEL_XPOS+3*FONT_SPACING, VEL_YPOS, "km/h", font, fontColor, backroundColor);
+                drawString(KM_XPOS+6*FONT_SPACING, KM_YPOS, "km", font, fontColor, backroundColor);
+                draw_Button(X0_BUTTON_BL, Y0_BUTTON_BL, X1_BUTTON_BL, Y1_BUTTON_BL, "Theme", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+                draw_Button(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, "Reset", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+                draw_Button(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, "Next", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+                drawFirstPage();
+
+                page = PAGE1;
+
 
             }
             else if( CHECK_BUTTON_BC(xpos, ypos) ){
@@ -419,37 +499,37 @@ void init(void){
         write_command(0x2C);
         int x = 0; int y = 0;
         for (x = 0; x < DISPLAY_X_MAX; x++) {
-            for (y = 0; y < DISPLAY_Y_MAX; y++) {
-               write_data(0x00); // Schwarz
-               write_data(0x00);
-               write_data(0x00);
+            for (y = 0; y < DISPLAY_Y_MAX - BUTTON_HEIGHT; y++) {
+               write_data((backroundColor>>16)&0xff); // Schwarz
+               write_data((backroundColor>>8)&0xff);
+               write_data((backroundColor)&0xff);
             }
         }
 
 
-        rasterHalfCircle(CX, CY, RAD, false, WHITE); // Oberer Halbkreis
+        rasterHalfCircle(CX, CY, RAD, false, fontColor); // Oberer Halbkreis
         rasterHalfCircle(CX, CY, (RAD-30), false, GREY);
         rasterHalfCircle(CX, CY, (50), false, ORANGE);
 
 
         // draw units for speed and daily km counter
-        drawString(VEL_XPOS+3*FONT_SPACING, VEL_YPOS, "km/h", font, VEL_FONT_COLOR, BLACK);
+        drawString(VEL_XPOS+3*FONT_SPACING, VEL_YPOS, "km/h", font, fontColor, backroundColor);
 
-        drawString(KM_XPOS+6*FONT_SPACING, KM_YPOS, "km", font, KM_FONT_COLOR, BLACK);
+        drawString(KM_XPOS+6*FONT_SPACING, KM_YPOS, "km", font, fontColor, backroundColor);
 
         // draw first direction letter
-        drawSymbol(DIR_XPOS, DIR_YPOS, font[FORWARD-'!'], DIR_FONT_COLOR(FORWARD), BLACK);
+        drawSymbol(DIR_XPOS, DIR_YPOS, font[FORWARD-'!'], DIR_FONT_COLOR(FORWARD), backroundColor);
 
         // draw buttons
         draw_Button(X0_BUTTON_BL, Y0_BUTTON_BL, X1_BUTTON_BL, Y1_BUTTON_BL, "Theme", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
         draw_Button(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, "Reset", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
-        draw_Button(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, "Page", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+        draw_Button(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, "Next", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
 
 
         // fun
 #ifdef FUN
-        drawString(0, 0, "69", font, colorarray[colidx], BLACK);
-        drawString(DISPLAY_X_MAX-3*FONT_SPACING, 0, "420", font, colorarray[colidx], BLACK);
+        drawString(0, 0, "69", font, colorarray[colidx], backroundColor);
+        drawString(DISPLAY_X_MAX-3*FONT_SPACING, 0, "420", font, colorarray[colidx], backroundColor);
 #endif
 
     IntMasterEnable(); // Re-enable interrupts
