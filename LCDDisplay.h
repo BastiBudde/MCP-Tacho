@@ -46,7 +46,7 @@ inline void window_set(uint16_t min_x, uint16_t min_y, uint16_t max_x, uint16_t 
 void configure_display_controller_large(void);
 void draw_line_bresenham(int x0, int y0, int x1, int y1, uint32_t color);
 void draw_rectangle(int x0, int y0, int x1, int y1, int border_width, uint32_t color);
-void draw_filled_rectangle(int x0, int y0, int x1, int y1, colors color);
+void draw_filled_rectangle(int x0, int y0, int x1, int y1, uint32_t color);
 void setPixel(int x, int y, uint32_t color);
 void rasterCircle(int cx0, int cy0, int radius, uint32_t color);
 void rasterHalfCircle(int x0, int y0, int radius, bool upper, uint32_t color);

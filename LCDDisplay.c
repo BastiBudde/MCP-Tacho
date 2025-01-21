@@ -168,10 +168,9 @@ void draw_rectangle(int x0, int y0, int x1, int y1, int border_width, uint32_t c
 }
 
 void draw_filled_rectangle(int x0, int y0, int x1, int y1, uint32_t color){
-    window_set(x0, y0, x1, y1);
-
-    int npixel = (x1 - x0) * (y1 - y0);
+    int npixel = (x1 - x0 + 1) * (y1 - y0);
     int n;
+    window_set(x0, y0, x1, y1);
     write_command(0x2C);
     for (n = 0; n < npixel; n++) {
         write_data((color >> 16) & 0xff); // Rotanteil

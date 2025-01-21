@@ -28,7 +28,10 @@
 
 //#define FUN
 
-#define TIMER0_FREQ 2
+#define TIMER0_FREQ 10
+#define SPEED_EVAL_FREQ 2
+
+
 #define TIRE_CIRCUM_CM 171.0f // cm
 #define CM2M_f(cm)  (((float)cm) /   100.0f)
 #define M2KM_f(m)   (((float)m)  /   100.0f)
@@ -99,20 +102,27 @@ enum Pages {
 };
 
 
-enum Direction    direction;                // for remembering direction of rotation
-enum Pages        page = PAGE1;             // for remembering page to be displayed
-volatile uint32_t g_ui32SysClock;           // System Clk Frequency
-volatile uint32_t g_ui32EdgeCntS1S2 = 0;    // Edge Counter for S1 and S2
-volatile uint32_t g_ui32DailyCM = 0;        // Daily CM counter
-volatile float    g_fSpeedKMH   = 0.0f;     // Speed calculated from edge count
-volatile float    g_fRevsPerSec = 0.0f;     // RPS calculated from edge count
-uint16_t          g_ui16NeedelTipX = 0;     // Last x position of needle tip
-uint16_t          g_ui16NeedelTipY = 0;     // Last y position of needle tip
+enum Direction    direction;                 // for remembering direction of rotation
+enum Pages        page = PAGE1;              // for remembering page to be displayed
+volatile uint32_t g_ui32SysClock;            // System Clk Frequency
+volatile uint32_t g_ui32EdgeCntS1S2  = 0;    // Edge Counter for S1 and S2
+volatile uint32_t g_ui32DailyCM      = 0;    // Daily CM counter
+volatile float    g_fSpeedKMH        = 0.0f; // Speed calculated from edge count
+volatile float    g_fSpeedKMHPrev    = 0.0f; // Speed calculated from edge count
+volatile float    g_fSpeedKMHSmooth  = 0.0f; // Speed calculated from edge count
+volatile float    g_fRevsPerSec      = 0.0f; // RPS calculated from edge count
+uint16_t          g_ui16NeedelTipX   = 0;    // Last x position of needle tip
+uint16_t          g_ui16NeedelTipY   = 0;    // Last y position of needle tip
+volatile uint16_t g_ui16SpeedCounter = 0;
 
 // Global Variable
 colors backroundColor = BLACK;
 colors fontColor= WHITE;
 colors carColor= RED;
+
+volatile bool buttonBL = false;
+volatile bool buttonBC = false;
+volatile bool buttonBR = false;
 uint32_t xpos;
 uint32_t ypos;
 
@@ -124,6 +134,22 @@ uint8_t colidx = 1;
      Page Functions
 *********************************************************************************/
 
+void initFirstPage(){
+    draw_filled_rectangle(0, 0, DISPLAY_X_MAX-1, DISPLAY_Y_MAX-1, backroundColor);
+    drawString(VEL_XPOS+3*FONT_SPACING, VEL_YPOS, "km/h", font, fontColor, backroundColor);
+    drawString(KM_XPOS+6*FONT_SPACING, KM_YPOS, "km", font, fontColor, backroundColor);
+    draw_Button(X0_BUTTON_BL, Y0_BUTTON_BL, X1_BUTTON_BL, Y1_BUTTON_BL, "Theme", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+    draw_Button(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, "Reset", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+    draw_Button(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, "Next", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+}
+
+void initSecondPage(){
+    draw_filled_rectangle(0, 0, DISPLAY_X_MAX-1, DISPLAY_Y_MAX-BUTTON_HEIGHT-1, backroundColor);
+    draw_Button(X0_BUTTON_BL, Y0_BUTTON_BL, X1_BUTTON_BL, Y1_BUTTON_BL, "Back", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+    draw_Button(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, "Color", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+    draw_Button(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, "IDK", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+}
+
 void drawFirstPage(){
     // delete old needle
     draw_line_bresenham(CX, CY, g_ui16NeedelTipX, g_ui16NeedelTipY, backroundColor);
@@ -133,7 +159,7 @@ void drawFirstPage(){
 
 
     // Winkel in Bogenma�
-    float theta = PI - ((g_fSpeedKMH / 400.0f) * PI);
+    float theta = PI - ((g_fSpeedKMHSmooth / 400.0f) * PI);
     if (theta > PI){
         theta = PI;
     }else if (theta < 0){
@@ -195,27 +221,81 @@ void P1edgeISR(void){
 // Interrupt for evaluating and resetting edge count, updating display and evaluating touch inputs
 // Interrupt will be triggered with frequency set in define TIMER0_FREQ
 void timer0AISR(void){
-    TimerDisable(TIMER0_BASE, TIMER_A); // for debug
+    //TimerDisable(TIMER0_BASE, TIMER_A); // for debug
 
     TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT); // reset interrupt flag
+    g_ui16SpeedCounter++;
 
-    // evaluate counted edges in S1 and S2 signals to calculate Speed and increment Daily CM counter
-    g_fRevsPerSec  = ( ((float)g_ui32EdgeCntS1S2) * ((float)TIMER0_FREQ) ) / 16.0f;
-    g_ui32DailyCM += (uint32_t)( ( ((float)g_ui32EdgeCntS1S2)/16.0f ) * TIRE_CIRCUM_CM ); // calculate in floating point precision, then cast to uint
-    g_fSpeedKMH    = ( g_fRevsPerSec * TIRE_CIRCUM_CM * 36.0f )/1000.0f;
-    g_ui32EdgeCntS1S2 = 0;
+    if(g_ui16SpeedCounter == (TIMER0_FREQ/SPEED_EVAL_FREQ)){
+        g_ui16SpeedCounter = 0;
+
+        g_fSpeedKMHSmooth = g_fSpeedKMH;
+        g_fSpeedKMHPrev = g_fSpeedKMH;
+        // evaluate counted edges in S1 and S2 signals to calculate Speed and increment Daily CM counter
+        g_fRevsPerSec  = ( ((float)g_ui32EdgeCntS1S2) * ((float)SPEED_EVAL_FREQ) ) / 16.0f;
+        g_ui32DailyCM += (uint32_t)( ( ((float)g_ui32EdgeCntS1S2)/16.0f ) * TIRE_CIRCUM_CM ); // calculate in floating point precision, then cast to uint
+        g_fSpeedKMH    = ( g_fRevsPerSec * TIRE_CIRCUM_CM * 36.0f )/1000.0f;
+        g_ui32EdgeCntS1S2 = 0;
+    }else{
+        g_fSpeedKMHSmooth += ((g_fSpeedKMH - g_fSpeedKMHPrev)*g_ui16SpeedCounter)/(TIMER0_FREQ);
+    }
 
     switch(page){ // Check which page is displayed (buttons have different functionality on each page)
-            case PAGE1: // Tacho
-                drawFirstPage();
-                break;
+        case PAGE1: // Tacho
+            if( buttonBL ){
+               if (backroundColor == BLACK){
+                   backroundColor = WHITE;
+                   fontColor = BLACK;
+               }else{
+                   backroundColor = BLACK;
+                   fontColor = WHITE;
+               }
+               initFirstPage();
 
-            case PAGE2: //Renstrecke
-                drawSecondPage();
-                break;
+               buttonBL = false;
+            }
+            else if( buttonBC ){
+                g_ui32DailyCM = 0.0f;
+                buttonBC = false;
+            }
+            else if( buttonBR ){
+                page = PAGE2;
+                initSecondPage();
+                buttonBR = false;
+            }
 
-            default: break;
-        }
+            break;
+
+        case PAGE2: //Renstrecke
+            if( buttonBL ){
+                page = PAGE1;
+                initFirstPage();
+                buttonBL = false;
+            }
+            else if( buttonBC ){
+                buttonBC = false;
+            }
+            else if( buttonBR ){
+                buttonBR = false;
+            }
+
+
+            break;
+
+        default: break;
+    }
+
+    switch(page){
+        case PAGE1:
+            drawFirstPage();
+            break;
+
+        case PAGE2:
+            drawSecondPage();
+            break;
+
+        default: break;
+    }
 
 
     // fun
@@ -225,7 +305,7 @@ void timer0AISR(void){
     drawString(DISPLAY_X_MAX-3*FONT_SPACING, 0, "420", font, colorarray[colidx], backroundColor);
 #endif
 
-    TimerEnable(TIMER0_BASE, TIMER_A);  // for debug
+    //TimerEnable(TIMER0_BASE, TIMER_A);  // for debug
 }
 
 
@@ -246,97 +326,22 @@ void sysTickISR(){
     IntEnable(INT_GPIOP0); // Re-enable interrupts after timing critical section
     IntEnable(INT_GPIOP1);
 
-
-    switch(page){ // Check which page is displayed (buttons have different functionality on each page)
-        case PAGE1: // Tacho
-            if( CHECK_BUTTON_BL(xpos, ypos) ){
-               if (backroundColor == BLACK){
-                   backroundColor = WHITE;
-                   fontColor = BLACK;
-               }else{
-                   backroundColor = BLACK;
-                   fontColor = WHITE;
-               }
-               window_set(0, 0, DISPLAY_X_MAX - 1, DISPLAY_Y_MAX - BUTTON_HEIGHT - 1);
-               write_command(0x2C);
-               int x = 0; int y = 0;
-               for (x = 0; x < DISPLAY_X_MAX; x++) {
-                   for (y = 0; y < DISPLAY_Y_MAX - BUTTON_HEIGHT; y++) {
-                      write_data((backroundColor>>16)&0xff); // Schwarz
-                      write_data((backroundColor>>8)&0xff);
-                      write_data((backroundColor)&0xff);
-                   }
-               }
-               // draw units for speed and daily km counter
-               drawString(VEL_XPOS+3*FONT_SPACING, VEL_YPOS, "km/h", font, fontColor, backroundColor);
-               drawString(KM_XPOS+6*FONT_SPACING, KM_YPOS, "km", font, fontColor, backroundColor);
-               drawFirstPage();
-            }
-            else if( CHECK_BUTTON_BC(xpos, ypos) ){
-                g_ui32DailyCM = 0.0f;
-                drawFirstPage();
-            }
-            else if( CHECK_BUTTON_BR(xpos, ypos) ){
-                window_set(0, 0, DISPLAY_X_MAX - 1, DISPLAY_Y_MAX - BUTTON_HEIGHT- 1);
-                write_command(0x2C);
-                int x = 0; int y = 0;
-                for (x = 0; x < DISPLAY_X_MAX; x++) {
-                   for (y = 0; y < DISPLAY_Y_MAX - BUTTON_HEIGHT; y++) {
-                      write_data((backroundColor>>16)&0xff);
-                      write_data((backroundColor>>8)&0xff);
-                      write_data((backroundColor)&0xff);
-                   }
-                }
-                draw_Button(X0_BUTTON_BL, Y0_BUTTON_BL, X1_BUTTON_BL, Y1_BUTTON_BL, "Back", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
-                draw_Button(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, "Color", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
-                draw_Button(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, "IDK", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
-//                drawSecondPage();
-                drawSecondPage();
-                page = PAGE2;
-
-            }
-            else{
-
-            }
-
-            break;
-
-        case PAGE2: //Renstrecke
-            if( CHECK_BUTTON_BL(xpos, ypos) ){
-                window_set(0, 0, DISPLAY_X_MAX - 1, DISPLAY_Y_MAX - 1);
-                write_command(0x2C);
-                int x = 0; int y = 0;
-                for (x = 0; x < DISPLAY_X_MAX; x++) {
-                   for (y = 0; y < DISPLAY_Y_MAX - BUTTON_HEIGHT; y++) {
-                      write_data((backroundColor>>16)&0xff);
-                      write_data((backroundColor>>8)&0xff);
-                      write_data((backroundColor)&0xff);
-                   }
-                }
-                drawString(VEL_XPOS+3*FONT_SPACING, VEL_YPOS, "km/h", font, fontColor, backroundColor);
-                drawString(KM_XPOS+6*FONT_SPACING, KM_YPOS, "km", font, fontColor, backroundColor);
-                draw_Button(X0_BUTTON_BL, Y0_BUTTON_BL, X1_BUTTON_BL, Y1_BUTTON_BL, "Theme", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
-                draw_Button(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, "Reset", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
-                draw_Button(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, "Next", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
-                drawFirstPage();
-
-                page = PAGE1;
-
-
-            }
-            else if( CHECK_BUTTON_BC(xpos, ypos) ){
-
-            }
-            else if( CHECK_BUTTON_BR(xpos, ypos) ){
-
-            }
-            else{
-
-            }
-            break;
-
-        default: break;
+    // Check if any button is pressed
+    if( CHECK_BUTTON_BL(xpos, ypos) ){
+        buttonBL = true;
     }
+    else if( CHECK_BUTTON_BC(xpos, ypos) ){
+        buttonBC = true;
+    }
+    else if( CHECK_BUTTON_BR(xpos, ypos) ){
+        buttonBR = true;
+    }
+    else{
+
+    }
+
+
+
     //Site 1
     //Reset, Light/Dark-Mode,Next Site
 
