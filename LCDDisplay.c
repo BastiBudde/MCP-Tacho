@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <math.h>
+#include <stdio.h>
+#include <string.h>
 #include "font.h"
 
 #include "inc/hw_memmap.h"
@@ -165,7 +167,7 @@ void draw_rectangle(int x0, int y0, int x1, int y1, int border_width, uint32_t c
     }
 }
 
-void draw_filled_rectangle(int x0, int y0, int x1, int y1, colors color){
+void draw_filled_rectangle(int x0, int y0, int x1, int y1, uint32_t color){
     window_set(x0, y0, x1, y1);
 
     int npixel = (x1 - x0) * (y1 - y0);
@@ -296,6 +298,23 @@ void drawString(int x, int y, char* str, const char font[][212], uint32_t col, u
     }
 
     return;
+}
+
+void draw_Button(int x0, int y0, int x1, int y1, const char* str, uint32_t bg_color, uint32_t border_color, uint16_t border_width, uint32_t text_color){
+    int text_width = strlen(str)*FONT_SPACING;
+    int padding_x = ((x1-x0)-text_width)/2;
+    int padding_y = ((y1-y0)-FONT_SIZE_Y)/2;
+
+    if(!padding_y) padding_y=0;
+
+    draw_filled_rectangle(x0, y0, x1, y1, bg_color);
+    draw_rectangle(x0, y0, x1, y1, border_width, border_color);
+
+    if(padding_x){
+        drawString(x0+padding_x, y0+padding_y, str, font, WHITE, bg_color);
+    }else{
+        drawString(x0, y0+padding_y, str, font, WHITE, bg_color);
+    }
 }
 
 void drawInteger(int x, int y, const char font[][212], uint16_t number, uint32_t col, uint32_t bgcol) {
