@@ -26,6 +26,7 @@
 #include "driverlib/sysctl.h"
 #include "driverlib/timer.h"
 
+//#define FUN
 
 #define TIMER0_FREQ 2
 #define TIRE_CIRCUM_CM 171.0f // cm
@@ -54,13 +55,14 @@
 // BUTTONS
 #define BUTTON_COLOR GREY
 #define BUTTON_BORDER_COLOR WHITE
+#define BUTTON_TEXT_COLOR WHITE
 
 #define BUTTON_WIDTH (DISPLAY_X_MAX/3)
+#define BUTTON_BORDER_WIDTH 2
 
 #define BUTTON_PADDING 10
 #define BUTTON_HEIGTH (FONT_SIZE_Y + 2*BUTTON_PADDING)
 
-#define DPXL2TPXL()
 
 #define X0_BUTTON_BL 0
 #define Y0_BUTTON_BL (Y1_BUTTON_BL - BUTTON_HEIGTH)
@@ -77,7 +79,12 @@
 #define X1_BUTTON_BR (X0_BUTTON_BR + BUTTON_WIDTH)
 #define Y1_BUTTON_BR Y1_BUTTON_BL
 
+#define DPX_2_TPX(X) (((X) * DISPLAY_X_MAX) / TOUCH_X_MAX)
+#define DPY_2_TPY(Y) (((Y) * DISPLAY_Y_MAX) / TOUCH_Y_MAX)
 
+#define CHECK_BUTTON_BL(x, y) ( DPX_2_TPX((x)) > X0_BUTTON_BL && DPX_2_TPX((x)) < X1_BUTTON_BL && DPY_2_TPY((y)) > Y0_BUTTON_BL && DPY_2_TPY((y)) < Y1_BUTTON_BL )
+#define CHECK_BUTTON_BC(x, y) ( DPX_2_TPX((x)) > X0_BUTTON_BC && DPX_2_TPX((x)) < X1_BUTTON_BC && DPY_2_TPY((y)) > Y0_BUTTON_BC && DPY_2_TPY((y)) < Y1_BUTTON_BC )
+#define CHECK_BUTTON_BR(x, y) ( DPX_2_TPX((x)) > X0_BUTTON_BR && DPX_2_TPX((x)) < X1_BUTTON_BR && DPY_2_TPY((y)) > Y0_BUTTON_BR && DPY_2_TPY((y)) < Y1_BUTTON_BR )
 
 
 
@@ -86,8 +93,14 @@ enum Direction {
     BACKWARD = 'B'
 };
 
+enum Pages {
+    PAGE1,
+    PAGE2
+};
+
 
 enum Direction    direction;                // for remembering direction of rotation
+enum Pages        page = PAGE1;             // for remembering page to be displayed
 volatile uint32_t g_ui32SysClock;           // System Clk Frequency
 volatile uint32_t g_ui32EdgeCntS1S2 = 0;    // Edge Counter for S1 and S2
 volatile uint32_t g_ui32DailyCM = 0;        // Daily CM counter
@@ -95,14 +108,18 @@ volatile float    g_fSpeedKMH   = 0.0f;     // Speed calculated from edge count
 volatile float    g_fRevsPerSec = 0.0f;     // RPS calculated from edge count
 uint16_t          g_ui16NeedelTipX = 0;     // Last x position of needle tip
 uint16_t          g_ui16NeedelTipY = 0;     // Last y position of needle tip
-// Global Variable
-uint8_t button_changed;
-uint8_t color_changed;
-uint16_t xpos;
-uint16_t ypos;
 
+// Global Variable
+volatile bool buttonL;
+volatile bool buttonC;
+volatile bool buttonR;
+uint32_t xpos;
+uint32_t ypos;
+
+#ifdef FUN
 // fun
 uint8_t colidx = 1;
+#endif
 
 
 /********************************************************************************
@@ -164,6 +181,11 @@ void timer0AISR(void){
 
     // Winkel in Bogenma�
     float theta = PI - ((g_fSpeedKMH / 400.0f) * PI);
+    if (theta > PI){
+        theta = PI;
+    }else if (theta < 0){
+        theta = 0.0f;
+    }
 
     // Koordinaten berechnen
     g_ui16NeedelTipX = (int)(CX + RAD * cos(theta));
@@ -176,10 +198,11 @@ void timer0AISR(void){
     drawSymbol(DIR_XPOS, DIR_YPOS, font[direction], DIR_FONT_COLOR(direction), BLACK);
 
     // fun
+#ifdef FUN
     colidx = (colidx+1) % 10;
     drawString(0, 0, "69", font, colorarray[colidx], BLACK);
     drawString(DISPLAY_X_MAX-3*FONT_SPACING, 0, "420", font, colorarray[colidx], BLACK);
-
+#endif
 
     TimerEnable(TIMER0_BASE, TIMER_A);  // for debug
 }
@@ -197,26 +220,53 @@ void sysTickISR(){
     for (x = 0; x < 10; x++);           //Busy wait
     ypos = touch_read();                //ypos value read ( 0.....4095 )
 
+    xpos = TOUCH_X_MAX - xpos;
+
     IntEnable(INT_GPIOP0); // Re-enable interrupts after timing critical section
     IntEnable(INT_GPIOP1);
 
+
+    switch(page){ // Check which page is displayed (buttons have different functionality on each page)
+        case PAGE1: // Tacho
+            if( CHECK_BUTTON_BL(xpos, ypos) ){
+
+            }
+            else if( CHECK_BUTTON_BC(xpos, ypos) ){
+
+            }
+            else if( CHECK_BUTTON_BR(xpos, ypos) ){
+
+            }
+            else{
+
+            }
+
+            break;
+
+        case PAGE2: //Renstrecke
+            if( CHECK_BUTTON_BL(xpos, ypos) ){
+
+            }
+            else if( CHECK_BUTTON_BC(xpos, ypos) ){
+
+            }
+            else if( CHECK_BUTTON_BR(xpos, ypos) ){
+
+            }
+            else{
+
+            }
+            break;
+
+        default: break;
+    }
     //Site 1
     //Reset, Light/Dark-Mode,Next Site
 
     //Site 2
     //Back Site, Carosserie Farbe, Reifen Farbe
     //Karosserie*
-    if((ypos >= 3000) && (ypos<= 4095)){
-        if ((xpos >= 3000) && (xpos<= 4095)){
-                button_changed = 0x00;
-        }else if((xpos >= 200) && (xpos<= 300)){
-            if (button_changed){
-                color_changed = !color_changed;
-            }else{
-                button_changed = 0x01;
-            }
-        }
-    }
+
 }
 
 
@@ -394,22 +444,16 @@ void init(void){
         drawSymbol(DIR_XPOS, DIR_YPOS, font[FORWARD-'!'], DIR_FONT_COLOR(FORWARD), BLACK);
 
         // draw buttons
-        draw_filled_rectangle(X0_BUTTON_BL, Y0_BUTTON_BL, X1_BUTTON_BL, Y1_BUTTON_BL, BUTTON_COLOR);
-        draw_rectangle(X0_BUTTON_BL, Y0_BUTTON_BL, X1_BUTTON_BL, Y1_BUTTON_BL, 2, BUTTON_BORDER_COLOR);
-        drawString(X0_BUTTON_BL+10, Y0_BUTTON_BL+BUTTON_PADDING, "Theme", font, WHITE, BUTTON_COLOR);
+        draw_Button(X0_BUTTON_BL, Y0_BUTTON_BL, X1_BUTTON_BL, Y1_BUTTON_BL, "Theme", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+        draw_Button(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, "Reset", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+        draw_Button(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, "Page", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
 
-        draw_filled_rectangle(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, BUTTON_COLOR);
-        draw_rectangle(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, 2, BUTTON_BORDER_COLOR);
-        drawString(X0_BUTTON_BC+10, Y0_BUTTON_BC+BUTTON_PADDING, "Reset", font, WHITE, BUTTON_COLOR);
-
-        draw_filled_rectangle(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, BUTTON_COLOR);
-        draw_rectangle(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, 2, BUTTON_BORDER_COLOR);
-        drawString(X0_BUTTON_BR+10, Y0_BUTTON_BR+BUTTON_PADDING, "Page", font, WHITE, BUTTON_COLOR);
 
         // fun
+#ifdef FUN
         drawString(0, 0, "69", font, colorarray[colidx], BLACK);
         drawString(DISPLAY_X_MAX-3*FONT_SPACING, 0, "420", font, colorarray[colidx], BLACK);
-
+#endif
 
     IntMasterEnable(); // Re-enable interrupts
     TimerEnable(TIMER0_BASE, TIMER_A); // start timer
