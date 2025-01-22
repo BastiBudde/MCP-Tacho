@@ -126,6 +126,9 @@ volatile bool buttonBR = false;
 uint32_t xpos;
 uint32_t ypos;
 
+uint8_t g_u8carBodyColorIndex = 0;
+uint8_t g_u8carWheelColorIndex = 0;
+
 #ifdef FUN
 // fun
 uint8_t colidx = 1;
@@ -146,8 +149,8 @@ void initFirstPage(){
 void initSecondPage(){
     draw_filled_rectangle(0, 0, DISPLAY_X_MAX-1, DISPLAY_Y_MAX-BUTTON_HEIGHT-1, backroundColor);
     draw_Button(X0_BUTTON_BL, Y0_BUTTON_BL, X1_BUTTON_BL, Y1_BUTTON_BL, "Back", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
-    draw_Button(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, "Color", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
-    draw_Button(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, "IDK", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+    draw_Button(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, "Body", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+    draw_Button(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, "Wheels", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
 }
 
 void drawFirstPage(){
@@ -272,15 +275,17 @@ void timer0AISR(void){
             break;
 
         case PAGE2: //Renstrecke
-            if( buttonBL ){
+            if( buttonBL ){ // Back to page 1
                 page = PAGE1;
                 initFirstPage();
                 buttonBL = false;
             }
-            else if( buttonBC ){
+            else if( buttonBC ){ // Body color change
+                g_u8carBodyColorIndex = (g_u8carBodyColorIndex+1) % 10;
                 buttonBC = false;
             }
-            else if( buttonBR ){
+            else if( buttonBR ){ // Wheel color change
+                g_u8carWheelColorIndex = (g_u8carWheelColorIndex+1) % 10;
                 buttonBR = false;
             }
 
