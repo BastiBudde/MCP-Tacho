@@ -28,8 +28,8 @@
 
 //#define FUN
 
-#define TIMER0_FREQ 10
 #define SPEED_EVAL_FREQ 2
+#define TIMER0_FREQ (5*SPEED_EVAL_FREQ)
 
 
 #define TIRE_CIRCUM_CM 171.0f // cm
@@ -111,8 +111,8 @@ volatile float    g_fSpeedKMH        = 0.0f; // Speed calculated from edge count
 volatile float    g_fSpeedKMHPrev    = 0.0f; // Speed calculated from edge count
 volatile float    g_fSpeedKMHSmooth  = 0.0f; // Speed calculated from edge count
 volatile float    g_fRevsPerSec      = 0.0f; // RPS calculated from edge count
-uint16_t          g_ui16NeedelTipX   = 0;    // Last x position of needle tip
-uint16_t          g_ui16NeedelTipY   = 0;    // Last y position of needle tip
+uint16_t          g_ui16NeedleTipX   = 0;    // Last x position of needle tip
+uint16_t          g_ui16NeedleTipY   = 0;    // Last y position of needle tip
 volatile uint16_t g_ui16SpeedCounter = 0;
 
 // Global Variable
@@ -151,12 +151,6 @@ void initSecondPage(){
 }
 
 void drawFirstPage(){
-    // delete old needle
-    draw_line_bresenham(CX, CY, g_ui16NeedelTipX, g_ui16NeedelTipY, backroundColor);
-    rasterHalfCircle(CX, CY, RAD, false, fontColor); // Oberer Halbkreis
-    rasterHalfCircle(CX, CY, (RAD-30), false, GREY);
-    rasterHalfCircle(CX, CY, (50), false, ORANGE);
-
 
     // Winkel in Bogenma�
     float theta = PI - ((g_fSpeedKMHSmooth / 400.0f) * PI);
@@ -167,10 +161,21 @@ void drawFirstPage(){
     }
 
     // Koordinaten berechnen
-    g_ui16NeedelTipX = (int)(CX + RAD * cos(theta));
-    g_ui16NeedelTipY = (int)(CY - RAD * sin(theta)); // Minus f�r "Pixelkoordinaten"
+    uint16_t ui16NeedleTipXNew = (int)(CX + RAD * cos(theta));
+    uint16_t ui16NeedleTipYNew = (int)(CY - RAD * sin(theta)); // Minus für "Pixelkoordinaten"
 
-    draw_line_bresenham(CX, CY, g_ui16NeedelTipX, g_ui16NeedelTipY, ROT);
+    if(g_ui16NeedleTipX != ui16NeedleTipXNew || g_ui16NeedleTipY != ui16NeedleTipYNew){
+        // delete old needle
+        draw_line_bresenham(CX, CY, g_ui16NeedleTipX, g_ui16NeedleTipY, backroundColor);
+        rasterHalfCircle(CX, CY, RAD, false, fontColor); // Oberer Halbkreis
+        rasterHalfCircle(CX, CY, (RAD-30), false, GREY);
+        rasterHalfCircle(CX, CY, (50), false, ORANGE);
+        //draw new needle
+        draw_line_bresenham(CX, CY, ui16NeedleTipXNew, ui16NeedleTipYNew, ROT);
+
+        g_ui16NeedleTipX = ui16NeedleTipXNew;
+        g_ui16NeedleTipY = ui16NeedleTipYNew;
+    }
 
     drawInteger(VEL_XPOS, VEL_YPOS, font, (uint16_t)g_fSpeedKMH, fontColor, backroundColor);
     drawKM(KM_XPOS, KM_YPOS, font, g_ui32DailyCM, fontColor, backroundColor);
