@@ -90,6 +90,19 @@
 #define CHECK_BUTTON_BR(x, y) ( DPX_2_TPX((x)) > X0_BUTTON_BR && DPX_2_TPX((x)) < X1_BUTTON_BR && DPY_2_TPY((y)) > Y0_BUTTON_BR && DPY_2_TPY((y)) < Y1_BUTTON_BR )
 
 
+// Defines for race track
+#define CAR_WIDTH 100
+#define CAR_HEIGHT 50
+#define CAR_BUTTON_DISTANCE 50
+#define Y0_CAR (Y1_CAR - CAR_HEIGHT)
+#define Y1_CAR (Y1_BUTTON_BL - BUTTON_HEIGHT - CAR_BUTTON_DISTANCE)
+
+#define YSTREET (Y1_BUTTON_BL - BUTTON_HEIGHT - (CAR_BUTTON_DISTANCE)/2 )
+
+#define WHEEL_SIZE (YSTREET - Y1_CAR)
+#define Y0__WHEEL (Y1_CAR)
+#define Y1__WHEEL (YSTREET - 1)
+
 
 enum Direction {
     FORWARD  = 'F',
@@ -101,7 +114,7 @@ enum Pages {
     PAGE2
 };
 
-
+// Global Variable
 enum Direction    direction;                 // for remembering direction of rotation
 enum Pages        page = PAGE1;              // for remembering page to be displayed
 volatile uint32_t g_ui32SysClock;            // System Clk Frequency
@@ -115,10 +128,6 @@ uint16_t          g_ui16NeedleTipX   = 0;    // Last x position of needle tip
 uint16_t          g_ui16NeedleTipY   = 0;    // Last y position of needle tip
 volatile uint16_t g_ui16SpeedCounter = 0;
 
-// Global Variable
-colors backroundColor = BLACK;
-colors fontColor= WHITE;
-colors carColor= RED;
 
 volatile bool buttonBL = false;
 volatile bool buttonBC = false;
@@ -126,8 +135,32 @@ volatile bool buttonBR = false;
 uint32_t xpos;
 uint32_t ypos;
 
-uint8_t g_u8carBodyColorIndex = 0;
-uint8_t g_u8carWheelColorIndex = 0;
+
+colors backroundColor = BLACK;
+colors fontColor= WHITE;
+colors carColor= RED;
+
+const colors carColorArray[] = {
+    GREY,
+    RED,
+    GREEN,
+    BLUE,
+    YELLOW,
+    LILA,
+    ROT,
+    ORANGE,
+};
+uint8_t carColoridx = 1;
+//uint8_t wheelColoridx = 0;
+
+int32_t x0posCar = (int)(DISPLAY_X_MAX-CAR_WIDTH)/2;
+int32_t x1posCar = (int)(DISPLAY_X_MAX+CAR_WIDTH)/2;
+//int32_t x0posFrontWheel = (int)(DISPLAY_X_MAX+CAR_WIDTH)/2 - WHEEL_SIZE;
+//int32_t x1posFrontWheel = (int)(DISPLAY_X_MAX+CAR_WIDTH)/2;
+//int32_t x0posBackWheel = (int)(DISPLAY_X_MAX-CAR_WIDTH)/2;
+//int32_t x1posBackWheel = (int)(DISPLAY_X_MAX-CAR_WIDTH)/2 + WHEEL_SIZE;
+
+
 
 #ifdef FUN
 // fun
@@ -147,10 +180,14 @@ void initFirstPage(){
 }
 
 void initSecondPage(){
+    // Clear screen
     draw_filled_rectangle(0, 0, DISPLAY_X_MAX-1, DISPLAY_Y_MAX-BUTTON_HEIGHT-1, backroundColor);
+    // Draw new Buttons
     draw_Button(X0_BUTTON_BL, Y0_BUTTON_BL, X1_BUTTON_BL, Y1_BUTTON_BL, "Back", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
-    draw_Button(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, "Body", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
-    draw_Button(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, "Wheels", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+    draw_Button(X0_BUTTON_BC, Y0_BUTTON_BC, X1_BUTTON_BC, Y1_BUTTON_BC, "Color", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+    draw_Button(X0_BUTTON_BR, Y0_BUTTON_BR, X1_BUTTON_BR, Y1_BUTTON_BR, "Theme", BUTTON_COLOR, BUTTON_BORDER_COLOR, BUTTON_BORDER_WIDTH, BUTTON_TEXT_COLOR);
+    // Draw Race Track
+    draw_line_bresenham(0, YSTREET, DISPLAY_X_MAX-1, YSTREET, fontColor);
 }
 
 void drawFirstPage(){
@@ -187,7 +224,79 @@ void drawFirstPage(){
 }
 
 void drawSecondPage(){
+// delete rectangle from before
+    if (x1posCar> DISPLAY_X_MAX-1){
+        draw_filled_rectangle(x0posCar, Y0_CAR, (DISPLAY_X_MAX-1), Y1_CAR, backroundColor);
+        draw_filled_rectangle(0, Y0_CAR, (x1posCar-DISPLAY_X_MAX), Y1_CAR, backroundColor);
+    }else if(x0posCar< 0){
+        draw_filled_rectangle(0, Y0_CAR, x1posCar, Y1_CAR, backroundColor);
+        draw_filled_rectangle((DISPLAY_X_MAX-1+x0posCar), Y0_CAR, (DISPLAY_X_MAX-1), Y1_CAR, backroundColor);
+    }else{
+        draw_filled_rectangle(x0posCar, Y0_CAR, x1posCar, Y1_CAR, backroundColor);
+    }
 
+
+
+    switch(direction){
+        case FORWARD:
+            if(x1posCar + g_fSpeedKMH > DISPLAY_X_MAX-1 + CAR_WIDTH){
+                x0posCar = 0;
+                x1posCar = CAR_WIDTH;
+//                x0posFrontWheel = CAR_WIDTH - WHEEL_SIZE ;
+//                x1posFrontWheel CAR_WIDTH;
+//                x0posBackWheel = 0;
+//                x1posBackWheel = WHEEL_SIZE ;
+            }else{
+                x0posCar += g_fSpeedKMH;
+                x1posCar += g_fSpeedKMH;
+//                x0posFrontWheel += g_fSpeedKMH;
+//                x1posFrontWheel += g_fSpeedKMH;
+//                x0posBackWheel += g_fSpeedKMH;
+//                x1posBackWheel += g_fSpeedKMH;
+            }
+
+            break;
+        case BACKWARD:
+            if(x0posCar - g_fSpeedKMH < 0-CAR_WIDTH){
+                x0posCar = DISPLAY_X_MAX -1 - CAR_WIDTH;
+                x1posCar = DISPLAY_X_MAX -1;
+//                x0posFrontWheel = DISPLAY_X_MAX-1 - WHEEL_SIZE;
+//                x1posFrontWheel DISPLAY_X_MAX -1;
+//                x0posBackWheel = DISPLAY_X_MAX -1 - CAR_WIDTH;
+//                x1posBackWheel = DISPLAY_X_MAX -1 - CAR_WIDTH + WHEEL_SIZE;
+            }else{
+                x0posCar -= g_fSpeedKMH;
+                x1posCar -= g_fSpeedKMH;
+//                x0posFrontWheel -= g_fSpeedKMH;
+//                x1posFrontWheel -= g_fSpeedKMH;
+//                x0posBackWheel -= g_fSpeedKMH;
+//                x1posBackWheel -= g_fSpeedKMH;
+            }
+
+            break;
+        default:
+            break;
+    }
+
+
+
+    if (x1posCar> DISPLAY_X_MAX-1){
+        draw_filled_rectangle(x0posCar, Y0_CAR, (DISPLAY_X_MAX-1), Y1_CAR, carColor);
+        draw_filled_rectangle(0, Y0_CAR, (x1posCar-DISPLAY_X_MAX), Y1_CAR, carColor);
+
+    }else if(x0posCar< 0){
+        draw_filled_rectangle(0, Y0_CAR, x1posCar, Y1_CAR, carColor);
+        draw_filled_rectangle((DISPLAY_X_MAX-1+x0posCar), Y0_CAR, (DISPLAY_X_MAX-1), Y1_CAR, carColor);
+
+
+    }else{
+        draw_filled_rectangle(x0posCar, Y0_CAR, x1posCar, Y1_CAR, carColor);
+//        draw_filled_rectangle(x0posFrontWheel, Y0_WHEEL, x1posFrontWheel, Y1_WHEEL, wheelColor);
+//        draw_filled_rectangle(x0posBackWheel, Y0_WHEEL, x1posBackWheel, Y1_WHEEL, wheelColor);
+    }
+
+
+    return;
 }
 
 /********************************************************************************
@@ -234,23 +343,26 @@ void timer0AISR(void){
     TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT); // reset interrupt flag
     g_ui16SpeedCounter++;
 
-    if(g_ui16SpeedCounter == (TIMER0_FREQ/SPEED_EVAL_FREQ)){
+    if(g_ui16SpeedCounter == (TIMER0_FREQ/SPEED_EVAL_FREQ)){ // Only eval speed with frequency of SPEED_EVAL_FREQ
         g_ui16SpeedCounter = 0;
+
 
         g_fSpeedKMHSmooth = g_fSpeedKMH;
         g_fSpeedKMHPrev = g_fSpeedKMH;
+
         // evaluate counted edges in S1 and S2 signals to calculate Speed and increment Daily CM counter
         g_fRevsPerSec  = ( ((float)g_ui32EdgeCntS1S2) * ((float)SPEED_EVAL_FREQ) ) / 16.0f;
         g_ui32DailyCM += (uint32_t)( ( ((float)g_ui32EdgeCntS1S2)/16.0f ) * TIRE_CIRCUM_CM ); // calculate in floating point precision, then cast to uint
         g_fSpeedKMH    = ( g_fRevsPerSec * TIRE_CIRCUM_CM * 36.0f )/1000.0f;
         g_ui32EdgeCntS1S2 = 0;
     }else{
+        // Interpolate Speed
         g_fSpeedKMHSmooth += ((g_fSpeedKMH - g_fSpeedKMHPrev)*g_ui16SpeedCounter)/(TIMER0_FREQ);
     }
 
     switch(page){ // Check which page is displayed (buttons have different functionality on each page)
         case PAGE1: // Tacho
-            if( buttonBL ){
+            if( buttonBL ){ // Theme change
                if (backroundColor == BLACK){
                    backroundColor = WHITE;
                    fontColor = BLACK;
@@ -259,14 +371,13 @@ void timer0AISR(void){
                    fontColor = WHITE;
                }
                initFirstPage();
-
                buttonBL = false;
             }
-            else if( buttonBC ){
+            else if( buttonBC ){ // Reset daily cm counter
                 g_ui32DailyCM = 0.0f;
                 buttonBC = false;
             }
-            else if( buttonBR ){
+            else if( buttonBR ){ // switch to page 2
                 page = PAGE2;
                 initSecondPage();
                 buttonBR = false;
@@ -280,15 +391,22 @@ void timer0AISR(void){
                 initFirstPage();
                 buttonBL = false;
             }
-            else if( buttonBC ){ // Body color change
-                g_u8carBodyColorIndex = (g_u8carBodyColorIndex+1) % 10;
+            else if( buttonBC ){ // car body color change
+                carColoridx = (carColoridx+1) % 8;
+                carColor = carColorArray[carColoridx];
                 buttonBC = false;
             }
-            else if( buttonBR ){ // Wheel color change
-                g_u8carWheelColorIndex = (g_u8carWheelColorIndex+1) % 10;
+            else if( buttonBR ){ // theme change
+                if (backroundColor == BLACK){
+                   backroundColor = WHITE;
+                   fontColor = BLACK;
+                }else{
+                   backroundColor = BLACK;
+                   fontColor = WHITE;
+                }
+                initSecondPage();
                 buttonBR = false;
             }
-
 
             break;
 
@@ -311,8 +429,8 @@ void timer0AISR(void){
     // fun
 #ifdef FUN
     colidx = (colidx+1) % 10;
-    drawString(0, 0, "69", font, colorarray[colidx], backroundColor);
-    drawString(DISPLAY_X_MAX-3*FONT_SPACING, 0, "420", font, colorarray[colidx], backroundColor);
+        drawString(0, 0, "69", font, colorarray[colidx], backroundColor);
+        drawString(DISPLAY_X_MAX-3*FONT_SPACING, 0, "420", font, colorarray[colidx], backroundColor);
 #endif
 
     //TimerEnable(TIMER0_BASE, TIMER_A);  // for debug
