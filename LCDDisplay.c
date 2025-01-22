@@ -177,7 +177,6 @@ void draw_filled_rectangle(int x0, int y0, int x1, int y1, uint32_t color){
         write_data((color >> 8) & 0xff);  // Gr�nanteil
         write_data(color & 0xff);         // Blauanteil
     }
-
 }
 
 

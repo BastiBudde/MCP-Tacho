@@ -7,6 +7,7 @@
 #include "font.h"
 #include "LCDDisplay.h"
 #include "Touch.h"
+#include "carSprite.c"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -91,10 +92,8 @@
 
 
 // Defines for race track
-#define CAR_WIDTH 100
-#define CAR_HEIGHT 50
 #define CAR_BUTTON_DISTANCE 50
-#define Y0_CAR (Y1_CAR - CAR_HEIGHT)
+#define Y0_CAR (Y1_CAR - CAR_SPRITE_HEIGHT)
 #define Y1_CAR (Y1_BUTTON_BL - BUTTON_HEIGHT - CAR_BUTTON_DISTANCE)
 
 #define YSTREET (Y1_BUTTON_BL - BUTTON_HEIGHT - (CAR_BUTTON_DISTANCE)/2 )
@@ -153,13 +152,12 @@ const colors carColorArray[] = {
 uint8_t carColoridx = 1;
 //uint8_t wheelColoridx = 0;
 
-int32_t x0posCar = (int)(DISPLAY_X_MAX-CAR_WIDTH)/2;
-int32_t x1posCar = (int)(DISPLAY_X_MAX+CAR_WIDTH)/2;
+int32_t x0posCar = (int)(DISPLAY_X_MAX-CAR_SPRITE_WIDTH)/2;
+int32_t x1posCar = (int)(DISPLAY_X_MAX+CAR_SPRITE_WIDTH)/2;
 //int32_t x0posFrontWheel = (int)(DISPLAY_X_MAX+CAR_WIDTH)/2 - WHEEL_SIZE;
 //int32_t x1posFrontWheel = (int)(DISPLAY_X_MAX+CAR_WIDTH)/2;
 //int32_t x0posBackWheel = (int)(DISPLAY_X_MAX-CAR_WIDTH)/2;
 //int32_t x1posBackWheel = (int)(DISPLAY_X_MAX-CAR_WIDTH)/2 + WHEEL_SIZE;
-
 
 
 #ifdef FUN
@@ -223,6 +221,29 @@ void drawFirstPage(){
     return;
 }
 
+void drawCarSprite(int x0, int y0, int height, int width, const uint32_t* sprite, uint32_t bg_color, uint32_t body_color){
+    int n;
+    window_set(x0, y0, x0+width-1, y0+height-1);
+    write_command(0x2C);
+    for (n = 0; n < width*height; n++) {
+        if(sprite[n]){
+            if(sprite[n]==0xFFFFFFFF){
+                write_data((body_color >> 16) & 0xff); // Rotanteil
+                write_data((body_color >> 8) & 0xff);  // Gr�nanteil
+                write_data(body_color & 0xff);         // Blauanteil
+            }else{
+                write_data((sprite[n] >> 16) & 0xff); // Rotanteil
+                write_data((sprite[n] >> 8) & 0xff);  // Gr�nanteil
+                write_data(sprite[n] & 0xff);         // Blauanteil
+            }
+        }else{
+            write_data((bg_color >> 16) & 0xff); // Rotanteil
+            write_data((bg_color >> 8) & 0xff);  // Gr�nanteil
+            write_data(bg_color & 0xff);         // Blauanteil
+        }
+    }
+}
+
 void drawSecondPage(){
 // delete rectangle from before
     if (x1posCar> DISPLAY_X_MAX-1){
@@ -239,9 +260,9 @@ void drawSecondPage(){
 
     switch(direction){
         case FORWARD:
-            if(x1posCar + g_fSpeedKMH > DISPLAY_X_MAX-1 + CAR_WIDTH){
+            if(x1posCar + g_fSpeedKMH > DISPLAY_X_MAX-1 + CAR_SPRITE_WIDTH){
                 x0posCar = 0;
-                x1posCar = CAR_WIDTH;
+                x1posCar = CAR_SPRITE_WIDTH;
 //                x0posFrontWheel = CAR_WIDTH - WHEEL_SIZE ;
 //                x1posFrontWheel CAR_WIDTH;
 //                x0posBackWheel = 0;
@@ -257,8 +278,8 @@ void drawSecondPage(){
 
             break;
         case BACKWARD:
-            if(x0posCar - g_fSpeedKMH < 0-CAR_WIDTH){
-                x0posCar = DISPLAY_X_MAX -1 - CAR_WIDTH;
+            if(x0posCar - g_fSpeedKMH < 0-CAR_SPRITE_WIDTH){
+                x0posCar = DISPLAY_X_MAX -1 - CAR_SPRITE_WIDTH;
                 x1posCar = DISPLAY_X_MAX -1;
 //                x0posFrontWheel = DISPLAY_X_MAX-1 - WHEEL_SIZE;
 //                x1posFrontWheel DISPLAY_X_MAX -1;
@@ -278,23 +299,7 @@ void drawSecondPage(){
             break;
     }
 
-
-
-    if (x1posCar> DISPLAY_X_MAX-1){
-        draw_filled_rectangle(x0posCar, Y0_CAR, (DISPLAY_X_MAX-1), Y1_CAR, carColor);
-        draw_filled_rectangle(0, Y0_CAR, (x1posCar-DISPLAY_X_MAX), Y1_CAR, carColor);
-
-    }else if(x0posCar< 0){
-        draw_filled_rectangle(0, Y0_CAR, x1posCar, Y1_CAR, carColor);
-        draw_filled_rectangle((DISPLAY_X_MAX-1+x0posCar), Y0_CAR, (DISPLAY_X_MAX-1), Y1_CAR, carColor);
-
-
-    }else{
-        draw_filled_rectangle(x0posCar, Y0_CAR, x1posCar, Y1_CAR, carColor);
-//        draw_filled_rectangle(x0posFrontWheel, Y0_WHEEL, x1posFrontWheel, Y1_WHEEL, wheelColor);
-//        draw_filled_rectangle(x0posBackWheel, Y0_WHEEL, x1posBackWheel, Y1_WHEEL, wheelColor);
-    }
-
+    drawCarSprite(x0posCar, Y0_CAR, CAR_SPRITE_HEIGHT, CAR_SPRITE_WIDTH, carSprite, backroundColor, carColor);
 
     return;
 }
